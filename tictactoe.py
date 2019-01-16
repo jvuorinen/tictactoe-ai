@@ -7,7 +7,7 @@ class TicTacToe:
         # self.boards contains a boolean board for each player
         self.board_p1 = np.zeros((3, 3)).astype(np.bool)
         self.board_p2 = np.zeros((3, 3)).astype(np.bool)
-        self.turn = 1
+        self.turn = sample((1,2), 1)[0]
         self.winner = None
         self.finished = False
 
@@ -62,8 +62,10 @@ class TicTacToe:
             self._change_turn()
             self._check_for_victory()
             self._check_for_stalemate()
+            return True
         else:
             print("Move {} not valid".format(move))
+            return False
 
 
     def play_random_move(self):
@@ -103,7 +105,7 @@ class TicTacToe:
     def reset(self):
         self.board_p1[:] = False
         self.board_p2[:] = False
-        self.turn = 1
+        self.turn = sample((1,2), 1)[0]
         self.winner = None
         self.finished = False
 
