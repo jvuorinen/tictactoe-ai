@@ -1,6 +1,7 @@
 from tictactoe import TicTacToe
 import numpy as np
 import gym
+from random import sample
 
 import gym
 import numpy as np
@@ -19,23 +20,26 @@ class GymLikeEnv:
     def __init__(self, ttt):
         self.ttt = ttt
         self.done = False
-        self.n_input = 16
-        self.n_output = 8
+        self.n_input = 18
+        self.n_output = 9
         if ttt.turn != 1:
             ttt.play_random_move()
 
+    def get_random_action(self):
+        return sample([0,1,2,3,4,5,6,8], 1)[0]
 
     def reset(self):
         self.ttt.reset()
         self.done = False
         if self.ttt.turn != 1:
             self.ttt.play_random_move()
+        return self.get_state()
 
     def get_state(self):
         return np.concatenate([self.ttt.board_p1.flatten().astype(np.int), self.ttt.board_p2.flatten().astype(np.int)])
 
-    def step(self, input):
-        move = ((0,0), (0,1), (0,2), (1,0), (1,1), (1,2), (2,0), (2,1), (2,2))[input]
+    def step(self, action):
+        move = ((0,0), (0,1), (0,2), (1,0), (1,1), (1,2), (2,0), (2,1), (2,2))[action]
         r = self.ttt.play_move(move)
         if r == False:
             reward = -5
@@ -43,6 +47,7 @@ class GymLikeEnv:
             reward = 10
         else:
             reward = 0
+            self.ttt.play_random_move()
         next_state = self.get_state()
         done = self.ttt.finished
         return (next_state, reward, done, {})
@@ -66,10 +71,9 @@ class DQN:
 
     def create_model(self):
         model = Sequential()
-        state_shape = self.env.observation_space.shape
-        model.add(Dense(6, input_dim=state_shape[0], activation="relu"))
+        model.add(Dense(6, input_dim=self.env.n_input, activation="relu"))
         # model.add(Dense(24, activation="relu"))
-        model.add(Dense(self.env.action_space.n))
+        model.add(Dense(self.env.n_output))
         model.compile(loss="mean_squared_error",
                       optimizer=Adam(lr=self.learning_rate))
 
@@ -83,7 +87,7 @@ class DQN:
         self.epsilon *= self.epsilon_decay
         self.epsilon = max(self.epsilon_min, self.epsilon)
         if np.random.random() < self.epsilon:
-            return self.env.action_space.sample()
+            return self.env.get_random_action()
         return np.argmax(self.model.predict(state)[0])
 
     def remember(self, state, action, reward, new_state, done):
@@ -122,9 +126,45 @@ if __name__ == "__main__":
     env = GymLikeEnv(TicTacToe())
     self = env
 
+    trials = 1000
+    trial_len = 10
 
-    env.ttt.print_state()
-    env.step(4)
+
+    dqn_agent = DQN(env=env)
+    # steps = []
+    win_counter = 0
+
+    #Model raining
+    for trial in range(trials):
+        cur_state = env.reset()
+        cur_state = np.reshape(cur_state, [1, env.n_input])
+        reward_sum = 0
+        for step in range(trial_len):
+            # env.render()
+            action = dqn_agent.act(cur_state)
+            new_state, reward, done, _ = env.step(action)
+            reward_sum += reward
+            # reward = reward if not done else -20
+            new_state = np.reshape(new_state, [1, env.n_input])
+            dqn_agent.remember(cur_state, action, reward, new_state, done)
+
+            cur_state = new_state
+
+            if done: break
+
+        dqn_agent.replay()  # internally iterates default (prediction) model
+        dqn_agent.target_train()  # iterates target model
+
+
+        print("Trial {}, game length {}, rewards {}, e: {:0.2f}, lr: {:0.4f}".format(trial, step, reward_sum, dqn_agent.epsilon, dqn_agent.learning_rate))
+        if step % 10 == 0:
+            dqn_agent.save_model(MODEL_BACKUP)
+
+
+
+    # env.reset()
+    # env.ttt.print_state()
+    # env.step(2)
 
     #
     # env = gym.make('CartPole-v1')
@@ -136,7 +176,7 @@ if __name__ == "__main__":
     #
     # # updateTargetNetwork = 1000
     # dqn_agent = DQN(env=env)
-    # steps = []
+    #
     #
     # win_counter = 0
     #

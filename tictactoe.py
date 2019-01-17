@@ -64,13 +64,13 @@ class TicTacToe:
             self._check_for_stalemate()
             return True
         else:
-            print("Move {} not valid".format(move))
+            # print("Move {} not valid".format(move))
             return False
 
 
     def play_random_move(self):
         if self.finished:
-            print("Game is already finished!")
+            # print("Game is already finished!")
             return
 
         moves = self._get_possible_moves()
@@ -90,7 +90,6 @@ class TicTacToe:
             i += 1
             if i > 100:
                 return
-
 
     def print_state(self):
         b0 = np.zeros((3, 3)).astype(np.int)
