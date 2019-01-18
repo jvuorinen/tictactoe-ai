@@ -1,4 +1,4 @@
-from tictactoe import TicTacToe
+from tictactoe_generic import TicTacToe
 import numpy as np
 import gym
 from random import sample
@@ -11,9 +11,11 @@ from keras.layers import Dense, Dropout
 from keras.optimizers import Adam
 
 import os
+import sys
 from collections import deque
 
-MODEL_BACKUP = "dqn-against-random-weights.h5"
+WEIGHTS_FILE_MODEL = "dqn-against-random-weights.h5"
+WEIGHTS_FILE_TARGET = "dqn-against-random-target-weights.h5"
 MY_ID = 1
 
 class GymLikeEnv:
@@ -57,11 +59,10 @@ class DQN:
     def __init__(self, env):
         self.env = env
         self.memory = deque(maxlen=2000)
-        self.weight_backup = MODEL_BACKUP
 
         self.gamma = 0.9
         self.epsilon = 1.0
-        self.epsilon_min = 0.01
+        self.epsilon_min = 0.1
         self.epsilon_decay = 0.9995
         self.learning_rate = 0.005
         self.tau = .125
@@ -83,10 +84,10 @@ class DQN:
 
         return model
 
-    def act(self, state):
+    def act(self, state, explore=True):
         self.epsilon *= self.epsilon_decay
         self.epsilon = max(self.epsilon_min, self.epsilon)
-        if np.random.random() < self.epsilon:
+        if explore & (np.random.random() < self.epsilon):
             return self.env.get_random_action()
         return np.argmax(self.model.predict(state)[0])
 
@@ -116,117 +117,68 @@ class DQN:
             target_weights[i] = weights[i] * self.tau + target_weights[i] * (1 - self.tau)
         self.target_model.set_weights(target_weights)
 
-    def save_model(self, fn):
-        self.model.save(fn)
+    def save_model(self):
+        print('Saving weights')
+        self.model.save(WEIGHTS_FILE_MODEL)
+        self.target_model.save(WEIGHTS_FILE_TARGET)
+
+    def load_weights(self):
+        print('Loading weights')
+        self.epsilon = self.epsilon_min
+        self.model.load_weights(WEIGHTS_FILE_MODEL)
+        self.target_model.load_weights(WEIGHTS_FILE_TARGET)
+
+    def train_model(self, trials = 1000, trial_len=10, autosave = False):
+        #Model raining
+        for trial in range(trials):
+            cur_state = self.env.reset()
+            cur_state = np.reshape(cur_state, [1, self.env.n_input])
+            reward_sum = 0
+            for step in range(trial_len):
+                # env.render()
+                action = self.act(cur_state)
+                new_state, reward, done, _ = self.env.step(action)
+                reward_sum += reward
+                # reward = reward if not done else -20
+                new_state = np.reshape(new_state, [1, self.env.n_input])
+                dqn_agent.remember(cur_state, action, reward, new_state, done)
+
+                cur_state = new_state
+
+                if done: break
+
+            self.replay()  # internally iterates default (prediction) model
+            self.target_train()  # iterates target model
+
+            print("Trial {}, game length {}, rewards {}, e: {:0.2f}, lr: {:0.4f}".format(trial, step, reward_sum, dqn_agent.epsilon, dqn_agent.learning_rate))
+            if (step % 100 == 0) & autosave:
+                self.save_model()
+
+    def play_against_human(self):
+        self.env.ttt.reset()
+        while self.env.ttt.finished == False:
+            if self.env.ttt.turn == 1:
+                state = self.env.get_state()
+                state = np.reshape(state, [1, self.env.n_input])
+                action = self.act(state, explore=False)
+                move = ((0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (1, 2), (2, 0), (2, 1), (2, 2))[action]
+                self.env.ttt.play_move(move)
+            else:
+                self.env.ttt.print_state()
+                ip = int(input())
+                move = ((0,0), (0,1), (0,2), (1,0), (1,1), (1,2), (2,0), (2,1), (2,2))[ip-1]
+                self.env.ttt.play_move(move)
+        self.env.ttt.print_state()
 
 
 if __name__ == "__main__":
     g = gym.make('CartPole-v1')
 
     env = GymLikeEnv(TicTacToe())
-    self = env
-
-    trials = 1000
-    trial_len = 10
-
 
     dqn_agent = DQN(env=env)
-    # steps = []
-    win_counter = 0
 
-    #Model raining
-    for trial in range(trials):
-        cur_state = env.reset()
-        cur_state = np.reshape(cur_state, [1, env.n_input])
-        reward_sum = 0
-        for step in range(trial_len):
-            # env.render()
-            action = dqn_agent.act(cur_state)
-            new_state, reward, done, _ = env.step(action)
-            reward_sum += reward
-            # reward = reward if not done else -20
-            new_state = np.reshape(new_state, [1, env.n_input])
-            dqn_agent.remember(cur_state, action, reward, new_state, done)
-
-            cur_state = new_state
-
-            if done: break
-
-        dqn_agent.replay()  # internally iterates default (prediction) model
-        dqn_agent.target_train()  # iterates target model
-
-
-        print("Trial {}, game length {}, rewards {}, e: {:0.2f}, lr: {:0.4f}".format(trial, step, reward_sum, dqn_agent.epsilon, dqn_agent.learning_rate))
-        if step % 10 == 0:
-            dqn_agent.save_model(MODEL_BACKUP)
-
-
-
-    # env.reset()
-    # env.ttt.print_state()
-    # env.step(2)
-
-    #
-    # env = gym.make('CartPole-v1')
-    # state_size = env.observation_space.shape[0]
-    # action_size = env.action_space.n
-    #
-    # trials = 10
-    # trial_len = 500
-    #
-    # # updateTargetNetwork = 1000
-    # dqn_agent = DQN(env=env)
-    #
-    #
-    # win_counter = 0
-    #
-    # for trial in range(trials):
-    #     cur_state = env.reset()
-    #     cur_state = np.reshape(cur_state, [1, state_size])
-    #     max_reward = 0
-    #     for step in range(trial_len):
-    #         # env.render()
-    #         action = dqn_agent.act(cur_state)
-    #         new_state, reward, done, _ = env.step(action)
-    #
-    #         reward = reward if not done else -20
-    #         new_state = np.reshape(new_state, [1, state_size])
-    #         dqn_agent.remember(cur_state, action, reward, new_state, done)
-    #
-    #         cur_state = new_state
-    #
-    #         if done: break
-    #
-    #     if step > 400:
-    #         win_counter += 1
-    #     else:
-    #         win_counter = 0
-    #
-    #     if win_counter == 10:
-    #         break
-    #
-    #     dqn_agent.replay()  # internally iterates default (prediction) model
-    #     dqn_agent.target_train()  # iterates target model
-    #
-    #
-    #     print("Trial {}, length {}, e: {:0.2f}, lr: {:0.4f}".format(trial, step, dqn_agent.epsilon, dqn_agent.learning_rate))
-    #     if step % 10 == 0:
-    #         dqn_agent.save_model(MODEL_BACKUP)
-    #
-    #
-    # for trial in range(10):
-    #     cur_state = env.reset()
-    #     cur_state = np.reshape(cur_state, [1, state_size])
-    #     for step in range(trial_len):
-    #         env.render()
-    #         action = dqn_agent.act(cur_state)
-    #         new_state, reward, done, _ = env.step(action)
-    #
-    #         # reward = reward if not done else -20
-    #         new_state = np.reshape(new_state, [1, state_size])
-    #
-    #         cur_state = new_state
-    #         if done:
-    #             break
-    #
-
+    # dqn_agent.load_weights()
+    dqn_agent.train_model(2000)
+    # dqn_agent.save_model()
+    # dqn_agent.play_against_human()

@@ -1,13 +1,42 @@
 import numpy as np
 from random import sample
+from itertools import groupby
+
+
+def longest_consecutive_run(a):
+    longest = 0
+    for i, j in groupby(a):
+        longest = max(longest, sum(j))
+    return longest
+
+
+def check_if_move_leads_to_win(board, move, win_length):
+    max_idx = board.shape[0] - 1
+    i, j = move
+    row = board[i,:]
+    column = board[:, j]
+
+    offset_1 = j - i
+    offset_2 = (max_idx - i) - j
+    diag_1 = board.diagonal(offset=offset_1)
+    diag_2 = np.fliplr(board).diagonal(offset=offset_2)
+
+    for check in [row, column, diag_1, diag_2]:
+        if longest_consecutive_run(check) >= win_length:
+            return True
+    return False
 
 
 class TicTacToe:
-    def __init__(self):
+    def __init__(self, size=3, win_length=3):
         # self.boards contains a boolean board for each player
-        self.board_p1 = np.zeros((3, 3)).astype(np.bool)
-        self.board_p2 = np.zeros((3, 3)).astype(np.bool)
+        self.size = size
+        self.n_cells = size ** 2
+        self.win_length = win_length
+        self.board_p1 = np.zeros((self.size, self.size)).astype(np.bool)
+        self.board_p2 = np.zeros((self.size, self.size)).astype(np.bool)
         self.turn = sample((1,2), 1)[0]
+        self.i = 1
         self.winner = None
         self.finished = False
 
@@ -25,44 +54,34 @@ class TicTacToe:
 
     def _check_move_validity(self, move):
         # Make sure "move" has correct format and neither player already has a mark there
-        assert (type(move) == tuple) & (len(move) == 2) & (0 <= sum(move) <= 4)
+        assert (type(move) == tuple) & (len(move) == 2) & (0 <= sum(move) <= 2 * (self.size - 1))
         return ~(self.board_p1[move] | self.board_p2[move])
 
     def _mark_move(self, move):
         # print("Marking {} for player number {}".format(move, self.turn))
         b = self._get_active_player_board()
         b[move] = True
-
-    def _find_winner(self):
-        for i, board in ((1, self.board_p1), (2, self.board_p2)):
-            if np.any(np.sum(board, axis=0) == 3): return i
-            elif np.any(np.sum(board, axis=1) == 3): return i
-            elif np.all(np.diagonal(board)): return i
-            elif np.all(np.diagonal(np.fliplr(board))): return i
-        return False
-
-    def _check_for_victory(self):
-        w = self._find_winner()
-        if w:
-            # print("winner found: {}".format(w))
-            self.winner = w
+        # Mark possible victory
+        if check_if_move_leads_to_win(b, move, self.win_length):
+            self.winner = self.turn
             self.finished = True
             self.turn = 0
-
-    def _check_for_stalemate(self):
-        moves = self._get_possible_moves()
-        if len(moves) == 0:
+            return
+        # Mark possible stalemate
+        if self.i == self.n_cells:
             self.finished = True
             self.turn = 0
             self.winner = 0
+            return
+        self.i += 1
 
     def play_move(self, move):
         if self._check_move_validity(move):
             self._mark_move(move)
+            if self.finished:
+                return True
             self._change_turn()
-            self._check_for_victory()
-            self._check_for_stalemate()
-            return True
+
         else:
             # print("Move {} not valid".format(move))
             return False
@@ -86,44 +105,44 @@ class TicTacToe:
     def play_random_game(self):
         i = 0
         while self.finished == False:
-            # self.print_state()
+            # print(self)
             self.play_random_move()
             i += 1
             if i > 100:
                 return
 
-    def print_state(self):
-        b0 = np.zeros((3, 3)).astype(np.int)
+    def __repr__(self):
+        b0 = np.zeros((self.size, self.size)).astype(np.int)
         b1 = self.board_p1.astype(int)
-        b2 = 2*self.board_p2.astype(int)
-        b = b0 + b1 + b2
-        print("Finished: {}".format(self.finished))
-        print("Current turn: {}".format(self.turn))
-        print("Winner: {}".format(self.winner))
-        print(b)
+        b2 = 2 * self.board_p2.astype(int)
+        t0 = str(b0 + b1 + b2) + '\n'
+        t1 = "Finished: {}\n".format(self.finished)
+        t2 = "Current turn: {}\n".format(self.turn)
+        t3 = "Winner: {}\n".format(self.winner)
+        t4 = "Turns passed: {}\n".format(self.i)
+        return t0 + t1 + t2 + t3 + t4
 
     def reset(self):
         self.board_p1[:] = False
         self.board_p2[:] = False
+        self.i = 1
         self.turn = sample((1,2), 1)[0]
         self.winner = None
         self.finished = False
 
-def play_random_games(n):
-    ttt = TicTacToe()
-
-    wins = [0, 0, 0]
-
-    for i in range(n):
-        ttt.reset()
-        ttt.play_random_game()
-        ttt.print_state()
-        w = ttt.winner
-        # print(w)
-        wins[w] += 1
-
-    print(wins)
+    def play_random_games(self, n):
+        wins = [0, 0, 0]
+        for i in range(n):
+            self.reset()
+            self.play_random_game()
+            # print(self)
+            w = self.winner
+            # print(w)
+            wins[w] += 1
+        print(wins)
 
 
 if __name__ == '__main__':
-    play_random_games(1000)
+    ttt = TicTacToe(size=5, win_length=4)
+    ttt.play_random_games(1000)
+    # print(ttt)
