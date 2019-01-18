@@ -14,21 +14,22 @@ import os
 import sys
 from collections import deque
 
-WEIGHTS_FILE_MODEL = "dqn-against-random-weights.h5"
-WEIGHTS_FILE_TARGET = "dqn-against-random-target-weights.h5"
+WEIGHTS_FILE_MODEL = "weights/dqn-against-random-weights.h5"
+WEIGHTS_FILE_TARGET = "weights/dqn-against-random-target-weights.h5"
 MY_ID = 1
 
 class GymLikeEnv:
     def __init__(self, ttt):
         self.ttt = ttt
         self.done = False
-        self.n_input = 18
-        self.n_output = 9
+        self.n_input = 2 * ttt.n_cells
+        self.n_output = ttt.n_cells
+        self.action_space = [(i,j) for i in range(ttt.size) for j in range(ttt.size)]
         if ttt.turn != 1:
             ttt.play_random_move()
 
     def get_random_action(self):
-        return sample([0,1,2,3,4,5,6,8], 1)[0]
+        return np.random.randint(self.n_output)
 
     def reset(self):
         self.ttt.reset()
@@ -41,7 +42,7 @@ class GymLikeEnv:
         return np.concatenate([self.ttt.board_p1.flatten().astype(np.int), self.ttt.board_p2.flatten().astype(np.int)])
 
     def step(self, action):
-        move = ((0,0), (0,1), (0,2), (1,0), (1,1), (1,2), (2,0), (2,1), (2,2))[action]
+        move = self.action_space[action]
         r = self.ttt.play_move(move)
         if r == False:
             reward = -5
@@ -64,7 +65,7 @@ class DQN:
         self.epsilon = 1.0
         self.epsilon_min = 0.1
         self.epsilon_decay = 0.9995
-        self.learning_rate = 0.005
+        self.learning_rate = 0.01
         self.tau = .125
 
         self.model = self.create_model()
@@ -72,8 +73,8 @@ class DQN:
 
     def create_model(self):
         model = Sequential()
-        model.add(Dense(6, input_dim=self.env.n_input, activation="relu"))
-        # model.add(Dense(24, activation="relu"))
+        model.add(Dense(25, input_dim=self.env.n_input, activation="relu"))
+        # model.add(Dense(25, activation="relu"))
         model.add(Dense(self.env.n_output))
         model.compile(loss="mean_squared_error",
                       optimizer=Adam(lr=self.learning_rate))
@@ -128,13 +129,13 @@ class DQN:
         self.model.load_weights(WEIGHTS_FILE_MODEL)
         self.target_model.load_weights(WEIGHTS_FILE_TARGET)
 
-    def train_model(self, trials = 1000, trial_len=10, autosave = False):
+    def train_model(self, trials = 1000, autosave = False):
         #Model raining
         for trial in range(trials):
             cur_state = self.env.reset()
             cur_state = np.reshape(cur_state, [1, self.env.n_input])
             reward_sum = 0
-            for step in range(trial_len):
+            for step in range(self.env.ttt.n_cells):
                 # env.render()
                 action = self.act(cur_state)
                 new_state, reward, done, _ = self.env.step(action)
@@ -150,7 +151,7 @@ class DQN:
             self.replay()  # internally iterates default (prediction) model
             self.target_train()  # iterates target model
 
-            print("Trial {}, game length {}, rewards {}, e: {:0.2f}, lr: {:0.4f}".format(trial, step, reward_sum, dqn_agent.epsilon, dqn_agent.learning_rate))
+            print("Trial {}, game length {}, rewards {}, e: {:0.2f}, lr: {:0.4f}".format(trial, step + 1, reward_sum, dqn_agent.epsilon, dqn_agent.learning_rate))
             if (step % 100 == 0) & autosave:
                 self.save_model()
 
@@ -161,24 +162,21 @@ class DQN:
                 state = self.env.get_state()
                 state = np.reshape(state, [1, self.env.n_input])
                 action = self.act(state, explore=False)
-                move = ((0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (1, 2), (2, 0), (2, 1), (2, 2))[action]
+                move = self.env.action_space[action]
                 self.env.ttt.play_move(move)
             else:
-                self.env.ttt.print_state()
+                print(self.env.ttt)
                 ip = int(input())
-                move = ((0,0), (0,1), (0,2), (1,0), (1,1), (1,2), (2,0), (2,1), (2,2))[ip-1]
+                move = self.env.action_space[ip-1]
                 self.env.ttt.play_move(move)
-        self.env.ttt.print_state()
+        print(self.env.ttt)
 
 
 if __name__ == "__main__":
-    g = gym.make('CartPole-v1')
-
-    env = GymLikeEnv(TicTacToe())
-
+    env = GymLikeEnv(TicTacToe(size=4, win_length=3))
     dqn_agent = DQN(env=env)
 
     # dqn_agent.load_weights()
-    dqn_agent.train_model(2000)
-    # dqn_agent.save_model()
+    dqn_agent.train_model(1000)
+    dqn_agent.save_model()
     # dqn_agent.play_against_human()

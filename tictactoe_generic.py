@@ -29,7 +29,6 @@ def check_if_move_leads_to_win(board, move, win_length):
 
 class TicTacToe:
     def __init__(self, size=3, win_length=3):
-        # self.boards contains a boolean board for each player
         self.size = size
         self.n_cells = size ** 2
         self.win_length = win_length
@@ -74,32 +73,24 @@ class TicTacToe:
             self.winner = 0
             return
         self.i += 1
+        self._change_turn()
 
     def play_move(self, move):
         if self._check_move_validity(move):
             self._mark_move(move)
-            if self.finished:
-                return True
-            self._change_turn()
-
+            return True
         else:
             # print("Move {} not valid".format(move))
             return False
-
 
     def play_random_move(self):
         if self.finished:
             # print("Game is already finished!")
             return
-
         moves = self._get_possible_moves()
-
-        if len(moves) >= 1:
-            # print("Possible moves: ", moves)
-            move = sample(moves, 1)[0]
-            self.play_move(move)
-        else:
-            print("No moves possible!")
+        # print("Possible moves: ", moves)
+        move = sample(moves, 1)[0]
+        self.play_move(move)
 
 
     def play_random_game(self):
