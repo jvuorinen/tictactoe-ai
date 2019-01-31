@@ -10,7 +10,7 @@ import pandas as pd
 
 import numpy as np
 from keras.models import Model
-from keras.layers import Dense, Input, Conv2D, Concatenate, Flatten
+from keras.layers import Dense, Input, Conv2D, Concatenate, Flatten, BatchNormalization, Activation
 from keras.optimizers import Adam
 
 from tictactoe import TicTacToe
@@ -22,39 +22,69 @@ class DQNAgent:
         self.memory = deque(maxlen=2000)
         self.name = name
 
-        self.gamma = 0.9
-        self.epsilon = 1.0
-        self.epsilon_min = 0.15
-        self.epsilon_decay = 0.9995
+        self.gamma = 0.8
+        self.epsilon = 0.15
+        # self.epsilon_min = 0.15
+        # self.epsilon_decay = 0.99995
         self.learning_rate = 0.01
         self.tau = .125
 
         self.model = self.create_model()
         self.target_model = self.create_model()
 
+
+    # def create_model(self):
+    #     s = self.size
+    #     input_me = Input(name="input-me", shape=(s, s, 1))
+    #     input_op = Input(name="input-opponent", shape=(s, s, 1))
+    #     convolution_1 = Conv2D(14, kernel_size=2, strides=2, padding='valid', use_bias=False)
+    #     # convolution_2 = Conv2D(128, kernel_size=2, activation='relu')
+    #
+    #     conv_me = Flatten()(convolution_1(input_me))
+    #     conv_op = Flatten()(convolution_1(input_op))
+    #
+    #     concat = Concatenate()([conv_me, conv_op])
+    #     # dense_1 = Activation('tanh')(BatchNormalization()(Dense(64)(concat)))
+    #     dense_1 = Dense(50)(concat)
+    #     # dense_2 = Activation('relu')(BatchNormalization()(Dense(s ** 2)(dense_1)))
+    #     out = Dense(s ** 2, activation='linear')(dense_1)
+    #
+    #     model = Model([input_me, input_op], out)
+    #     model.compile(loss="mean_squared_error",
+    #                   optimizer=Adam(lr=self.learning_rate))
+    #     return model
+
     def create_model(self):
         s = self.size
         input_me = Input(name="input-me", shape=(s, s, 1))
         input_op = Input(name="input-opponent", shape=(s, s, 1))
-        convolution = Conv2D(13, kernel_size=2, strides=2, padding='valid', use_bias=False)
+        # convolution_1 = Conv2D(14, kernel_size=2, strides=2, padding='valid', use_bias=False)
+        convolution_1 = Conv2D(14, kernel_size=2, strides=2, padding='valid', activation='relu')
+        # convolution_2 = Conv2D(32, kernel_size=2, activation='relu')
 
-        conv_me = Flatten()(convolution(input_me))
-        conv_op = Flatten()(convolution(input_op))
+        conv_me = Flatten()(convolution_1(input_me))
+        conv_op = Flatten()(convolution_1(input_op))
+        # conv_me = Flatten()(convolution_2(convolution_1(input_me)))
+        # conv_op = Flatten()(convolution_2(convolution_1(input_op)))
 
-        concat = Concatenate()([conv_me, conv_op])
-        dense_1 = Dense(100)(concat)
-        out = Dense(s ** 2)(dense_1)
+        concat_1 = Concatenate()([conv_me, conv_op])
+        # dense_1 = Activation('tanh')(BatchNormalization()(Dense(64)(concat)))
+        # dense_1 = Dense(128, activation='tanh')(concat_1)
+        # dense_1 = Dense(128, activation='tanh')(concat_1)
+        dense_1 = Dense(512, activation='relu')(concat_1)
+        dense_2 = Dense(256, activation='relu')(dense_1)
+        concat_2 = Concatenate()([Flatten()(input_me), Flatten()(input_op), dense_2])
+        out = Dense(s ** 2, activation='linear')(concat_2)
 
         model = Model([input_me, input_op], out)
         model.compile(loss="mean_squared_error",
                       optimizer=Adam(lr=self.learning_rate))
-
         return model
 
     def get_action(self, state, explore=True):
         # Gets best q action or explores
-        self.epsilon *= self.epsilon_decay
-        self.epsilon = max(self.epsilon_min, self.epsilon)
+        # self.epsilon *= self.epsilon_decay
+        # self.epsilon = max(self.epsilon_min, self.epsilon)
         if explore & (np.random.random() < self.epsilon):
             return np.random.randint(self.size ** 2)
         return np.argmax(self.model.predict(state)[0])
@@ -92,22 +122,27 @@ class DQNAgent:
 
     def load_weights(self):
         print('Loading weights')
-        self.epsilon = self.epsilon_min
+        # self.epsilon = self.epsilon_min
         self.model.load_weights("weights/{}.h5".format(self.name))
         self.target_model.load_weights("weights/{}-target.h5".format(self.name))
 
 
 class Arena:
-    def __init__(self, ttt):
+    def __init__(self, ttt, dqn_agent):
         self.ttt = ttt
-        self.dqn_agent = DQNAgent(size=ttt.size)
+        self.dqn_agent = dqn_agent
+        try:
+            self.dqn_agent.load_weights()
+        except OSError:
+            print("No weights found")
+
         self.dqn_memory_buffer = None
 
         self.reward_victory = 20
-        self.reward_defeat = 0
-        self.reward_illegal = -5
+        self.reward_defeat = -15
+        self.reward_illegal = -100
 
-        self.learning_history = pd.DataFrame(columns=['Game', 'Winner', 'Length', 'Errors'], dtype=int)
+        self.learning_history = pd.DataFrame(columns=['Game', 'Victory', 'Length', 'Errors'], dtype=int)
 
         self.possible_actions = [(i, j) for i in range(self.ttt.size) for j in range(self.ttt.size)]
 
@@ -131,15 +166,44 @@ class Arena:
         done = self.ttt.finished
         return next_state, reward, done
 
-    def train_dqn_against_random(self, n_games=10, autosave=True):
+    def _play_2nd_player_move(self, use_dqn=True):
+        if use_dqn:
+            #Play 2nd player move using dqn
+            state = self.get_state()
+            state[0], state[1] = state[1], state[0]
+            action = self.dqn_agent.get_action(state)
+            move = self.possible_actions[action]
+            r = self.ttt.play_move(move)
+            if not r:
+                # print("Illegal move, playing randomly...")
+                self.ttt.play_random_move()
+        else:
+            self.ttt.play_random_move()
+
+    def train_dqn(self, n_games=10, autosave=True, use_dqn=True, warm_start=False):
         my_id, opp_id = 1, 2
 
         for i in range(n_games):
             self.ttt.reset()
-            if self.ttt.turn != my_id:
-                self.ttt.play_random_move()
+
+            if warm_start:
+            a = []
+            while len(a) < 100:
+                times = np.random.randint(4,14)
+                for n in range(times):
+                    self.ttt.play_random_move()
+                    if self.ttt.finished:
+                        self.ttt.reset()
+                        times = 0
+                        break
+                a.append(times)
+
+            if self.ttt.turn == opp_id:
+                self._play_2nd_player_move(use_dqn)
+
             cur_state = self.get_state()
             error_counter = 0
+
             for step in range(self.ttt.n_cells):
                 action_idx = self.dqn_agent.get_action(cur_state)
                 new_state, reward, done = self._step(action_idx)
@@ -156,50 +220,54 @@ class Arena:
 
                 self.dqn_memory_buffer = [cur_state, action_idx, reward, new_state, done]
 
-                if done: break
+                if done:
+                    break
 
-                self.ttt.play_random_move()
+                self._play_2nd_player_move(use_dqn)
                 cur_state = new_state
 
             self.dqn_agent.train_batch()  # internally iterates default (prediction) model
             self.dqn_agent.target_train()  # iterates target model
 
-            print("Game {}, winner {}, game length {}, errors {}, e: {:0.2f}".format(
+            print("Game {}, Victory {}, game length {}, errors {}, e: {:0.2f}".format(
                 i,
-                ttt.winner,
+                self.ttt.winner == 1,
                 step + 1,
                 error_counter,
                 self.dqn_agent.epsilon))
 
             self.learning_history = self.learning_history.append(
-                {'Game': i, 'Winner': ttt.winner, 'Length': step + 1, 'Errors': error_counter}, ignore_index=True)
+                {'Game': i, 'Victory': self.ttt.winner == 1, 'Length': step + 1, 'Errors': error_counter}, ignore_index=True)
 
-            if ((i + 1) % 100 == 0) & autosave:
+            if ((i + 1) % 500 == 0) & autosave:
                 self.dqn_agent.save_model()
+
 
     def play_against_human(self):
         self.ttt.reset()
-        while self.ttt.finished == False:
+        while not self.ttt.finished:
             if self.ttt.turn == 1:
-                state = self.env.get_state()
-                # state = np.reshape(state, [1, self.env.n_input])
-                action = self.get_action(state, explore=False)
-                move = self.env.action_space[action]
-                self.env.ttt.play_move(move)
-            else:
-                print(self.env.ttt)
+                print(self.ttt)
                 ip = int(input())
-                move = self.env.action_space[ip - 1]
-                self.env.ttt.play_move(move)
-        print(self.env.ttt)
+                move = self.possible_actions[ip - 1]
+                self.ttt.play_move(move)
+            else:
+                self._play_2nd_player_move()
+        print(self.ttt)
 
 
 if __name__ == "__main__":
     ttt = TicTacToe(size=6, win_length=4)
-    arena = Arena(ttt)
+    dqn_agent = DQNAgent(size=ttt.size, name="board-6-4-big-with-skipped")
+    arena = Arena(ttt, dqn_agent)
 
-    arena.train_dqn_against_random(n_games=2000)
+    arena.train_dqn(n_games=500000, autosave=True, warm_start=True)
+    # arena.play_against_human()
+    # arena.train_dqn_against_random(n_games=50000)
     h = arena.learning_history.set_index('Game')
-    h.to_pickle('reports/learning_history.pkl')
-    h.rolling(10).mean().plot()
+    h.to_pickle('reports/learning_history-with-skipped-4.pkl')
+
+    h.Errors.rolling(1000).mean().plot()
+    h.Length.rolling(1000).mean().plot()
+    h.Victory.rolling(1000).mean().plot()
 
