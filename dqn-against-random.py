@@ -261,13 +261,13 @@ if __name__ == "__main__":
     dqn_agent = DQNAgent(size=ttt.size, name="board-6-4-big-with-skipped")
     arena = Arena(ttt, dqn_agent)
 
-    arena.train_dqn(n_games=500000, autosave=True, warm_start=True)
+    arena.train_dqn(n_games=1000000, autosave=True, warm_start=True)
     # arena.play_against_human()
     # arena.train_dqn_against_random(n_games=50000)
     h = arena.learning_history.set_index('Game')
-    h.to_pickle('reports/learning_history-with-skipped-4.pkl')
-
-    h.Errors.rolling(1000).mean().plot()
-    h.Length.rolling(1000).mean().plot()
-    h.Victory.rolling(1000).mean().plot()
-
+    h.to_pickle('reports/learning_history-with-skipped-5.pkl')
+    #
+    # h.Errors.rolling(1000).mean().plot()
+    # h.Length.rolling(1000).mean().plot()
+    # h.Victory.rolling(1000).mean().plot()
+    #
