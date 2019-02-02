@@ -1,48 +1,55 @@
 import numpy as np
 from copy import deepcopy
+import logging
+
+N_PLAYERS = 2
 
 
-def ucb(w, n, t, c = 1.414):
+def ucb(w, n, t, c=1.414):
     if t == 0:
         return 0
-    return (w/n) + (c * np.sqrt(np.log(t) / n))
+    return (w / n) + (c * np.sqrt(np.log(t) / n))
 
 
 class MockGame:
-    def __init__(self, size = 10):
+    def __init__(self, size=25):
         self.size = size
         self.finished = False
-        self.state = np.zeros(size).astype(int)
         self.turn = np.random.randint(2)
+        self.winner = None
+        self.depth = 25
+
+    def change_turn(self):
+        self.turn = 1 if self.turn == 0 else 0
 
     def save(self):
-        self.saved_state = self.state.copy()
-        self.saved_turn = self.turn
+        self.saved_state = (self.turn, self.winner, self.finished, self.depth)
 
     def load(self):
-        self.state = self.saved_state.copy()
-        self.turn = self.saved_turn
+        (self.turn, self.winner, self.finished, self.depth) = self.saved_state
 
     def get_possible_actions(self):
-        n = np.random.randint(1, 6)
-        np.random.choice(self.size, n, replace=False)
+        return np.random.choice(self.size, self.depth, replace=False)
 
     def play(self, action):
-        self.state[action] += 1
+        self.change_turn()
+        self.depth -= 1
+        pass
 
     def simulate_game(self):
-        np.random.randint(2)
-
+        return np.random.randint(2)
 
 
 class MCTSnode:
-    def __init__(self, parent, previous_action, depth):
-        self.n_won = [0, 0]
+    def __init__(self, parent, previous_action, previous_turn, depth, id):
+        self.n_won = np.array([0 for _ in range(N_PLAYERS)])
         self.n_sims = 0
         self.parent = parent
+        self.previous_turn = previous_turn
         self.depth = depth
-        self.children = []
+        self.id = id
         self.unvisited_children = set()
+        self.visited_children = []
         self.never_visited = True
         self.is_leaf = True
         self.ucb = 0
@@ -51,28 +58,20 @@ class MCTSnode:
         self.previous_action = previous_action
 
     def __repr__(self):
-        return "MCTS node, state:\n" \
-            "wins {}\n" \
-               "visited {}\n" \
-               "ucb-values {}\n" \
-               "parent {}\n" \
-               "children {}\n" \
-               "best_children {}\n" \
-               "is_leaf {}".format(
-                    self.n_won,
-                    self.n_sims,
-                    self.ucbs,
-                    self.parent,
-                    self.children,
-                    self.best_child,
-                    self.is_leaf)
+        return "Node {} at depth {}".format(self.id, self.depth)
+
 
 
 class MonteCarloTreeSearch:
     def __init__(self, simulator):
         self.n_rollouts = 0
         self.n_nodes = 1
-        self.root = MCTSnode(None, None, 0)
+        self.root = MCTSnode(
+            parent=None,
+            previous_action=None,
+            previous_turn=None,
+            depth=0,
+            id=0)
         self.sim = deepcopy(simulator)
         self.sim.save()
 
@@ -85,7 +84,8 @@ class MonteCarloTreeSearch:
         this leaf node."""
         current = self.root
         actions = []
-        while not current.isleaf:
+        while not current.is_leaf:
+            # logging.debug("Selection... passed {}".format(current))
             current = current.best_child
             actions.append(current.previous_action)
         for a in actions:
@@ -99,57 +99,79 @@ class MonteCarloTreeSearch:
         properly."""
         if not self.sim.finished:
             if leaf.never_visited:
-                leaf.unvisited_children.update(self.sim.get_possible_moves())
+                children = self.sim.get_possible_actions()
+                leaf.unvisited_children.update(children)
                 leaf.never_visited = False
 
             if leaf.unvisited_children:
+                self.n_nodes += 1
                 move = leaf.unvisited_children.pop()
-                c = MCTSnode(parent = leaf,
-                             previous_action = move,
-                             depth = leaf.depth + 1)
+                c = MCTSnode(parent=leaf,
+                             previous_action=move,
+                             previous_turn=self.sim.turn,
+                             depth=leaf.depth + 1,
+                             id=self.n_nodes)
+                leaf.visited_children.append(c)
                 self.sim.play(move)
-                if leaf.unvisited_children:
+                if not leaf.unvisited_children:
                     leaf.is_leaf = False
+            else:
+                # print("Not sure if it's cool to be here")
+                c = leaf
             return c
 
     def simulate(self):
         """Run a simulated playout from C until a result is achieved."""
-        result = self.sim.simulate_game()
-        return result
+        score = [i for i in range(N_PLAYERS)]
+        self.sim.simulate_game()
+        w = self.sim.winner
+        if w:
+            score[w] += 1
+        return np.array(score)
 
-    def backpropagate(self, child, result):
+    def backpropagate(self, child, score):
         """Update the current move sequence with the simulation result."""
         current = child
         while current:
             # 1) update current nodes win counter and sim counter
+            current.n_won += score
             current.n_sims += 1
             # 2) calculate ucb value for current node (note turn order)
+            print("calculating ucb for", current)
+            print(current.n_won[current.previous_turn])
             current.ucb = ucb(
-                w= "???",
+                w=current.n_won[current.previous_turn],
                 n=current.n_sims,
-                t=current.n_sims+1) # parents n has not yet been updated
+                t=current.n_sims + 1)  # parents n has not yet been updated
             # 3) update parent's best node
-            if current.ucb > current.parent.best_child_ucb:
-                current.parent.best_child_ucb = current.ucb
-                current.parent.best_child = current
+            if current.parent:
+                if current.ucb > current.parent.best_child_ucb:
+                    current.parent.best_child_ucb = current.ucb
+                    current.parent.best_child = current
 
             current = current.parent
 
-
-    def mcts_search(self, limit=10):
+    def search(self, limit=10):
+        self.sim.save()
         for i in range(limit):
+            # logging.debug("Sim {}...".format(i))
+            self.sim.load()
             l = self.select()
+            # logging.debug("Selected leaf node {}".format(l))
             c = self.expand(l)
-            r = self.simulate()
-            self.backpropagate(c, r)
+            # logging.debug("Selected child node{}".format(c))
+            s = self.simulate()
+            self.backpropagate(c, s)
             self.n_rollouts += 1
+            # logging.debug("...")
         return self.root.best_child.previous_action
 
 
 if __name__ == '__main__':
-    np.random.seed(123)
-    mock = MockGame()
-    mcts = MonteCarloTreeSearch(mock)
+    np.random.seed(42)
+    # logging.basicConfig(level=logging.DEBUG)
+    game = MockGame()
+    mcts = MonteCarloTreeSearch(game)
 
-
-
+    mcts.search(10)
+    print(mcts)

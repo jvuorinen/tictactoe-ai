@@ -10,7 +10,7 @@ import pandas as pd
 
 import numpy as np
 from tictactoe import TicTacToe
-from dqn_models import create_model
+from keras_models import create_model
 
 class DQNAgent:
     def __init__(self, size, name='anonymous'):
