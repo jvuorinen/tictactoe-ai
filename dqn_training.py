@@ -9,12 +9,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 import numpy as np
-from keras.models import Model
-from keras.layers import Dense, Input, Conv2D, Concatenate, Flatten, BatchNormalization, Activation
-from keras.optimizers import Adam
-
 from tictactoe import TicTacToe
-
+from dqn_models import create_model
 
 class DQNAgent:
     def __init__(self, size, name='anonymous'):
@@ -29,57 +25,8 @@ class DQNAgent:
         self.learning_rate = 0.01
         self.tau = .125
 
-        self.model = self.create_model()
-        self.target_model = self.create_model()
-
-
-    # def create_model(self):
-    #     s = self.size
-    #     input_me = Input(name="input-me", shape=(s, s, 1))
-    #     input_op = Input(name="input-opponent", shape=(s, s, 1))
-    #     convolution_1 = Conv2D(14, kernel_size=2, strides=2, padding='valid', use_bias=False)
-    #     # convolution_2 = Conv2D(128, kernel_size=2, activation='relu')
-    #
-    #     conv_me = Flatten()(convolution_1(input_me))
-    #     conv_op = Flatten()(convolution_1(input_op))
-    #
-    #     concat = Concatenate()([conv_me, conv_op])
-    #     # dense_1 = Activation('tanh')(BatchNormalization()(Dense(64)(concat)))
-    #     dense_1 = Dense(50)(concat)
-    #     # dense_2 = Activation('relu')(BatchNormalization()(Dense(s ** 2)(dense_1)))
-    #     out = Dense(s ** 2, activation='linear')(dense_1)
-    #
-    #     model = Model([input_me, input_op], out)
-    #     model.compile(loss="mean_squared_error",
-    #                   optimizer=Adam(lr=self.learning_rate))
-    #     return model
-
-    def create_model(self):
-        s = self.size
-        input_me = Input(name="input-me", shape=(s, s, 1))
-        input_op = Input(name="input-opponent", shape=(s, s, 1))
-        # convolution_1 = Conv2D(14, kernel_size=2, strides=2, padding='valid', use_bias=False)
-        convolution_1 = Conv2D(14, kernel_size=2, strides=2, padding='valid', activation='relu')
-        # convolution_2 = Conv2D(32, kernel_size=2, activation='relu')
-
-        conv_me = Flatten()(convolution_1(input_me))
-        conv_op = Flatten()(convolution_1(input_op))
-        # conv_me = Flatten()(convolution_2(convolution_1(input_me)))
-        # conv_op = Flatten()(convolution_2(convolution_1(input_op)))
-
-        concat_1 = Concatenate()([conv_me, conv_op])
-        # dense_1 = Activation('tanh')(BatchNormalization()(Dense(64)(concat)))
-        # dense_1 = Dense(128, activation='tanh')(concat_1)
-        # dense_1 = Dense(128, activation='tanh')(concat_1)
-        dense_1 = Dense(512, activation='relu')(concat_1)
-        dense_2 = Dense(256, activation='relu')(dense_1)
-        concat_2 = Concatenate()([Flatten()(input_me), Flatten()(input_op), dense_2])
-        out = Dense(s ** 2, activation='linear')(concat_2)
-
-        model = Model([input_me, input_op], out)
-        model.compile(loss="mean_squared_error",
-                      optimizer=Adam(lr=self.learning_rate))
-        return model
+        self.model = create_model(self.size, lr=self.learning_rate)
+        self.target_model = create_model(self.size, lr=self.learning_rate)
 
     def get_action(self, state, explore=True):
         # Gets best q action or explores
@@ -187,16 +134,12 @@ class Arena:
             self.ttt.reset()
 
             if warm_start:
-            a = []
-            while len(a) < 100:
-                times = np.random.randint(4,14)
+                times = np.random.randint(4, 14)
                 for n in range(times):
                     self.ttt.play_random_move()
                     if self.ttt.finished:
                         self.ttt.reset()
-                        times = 0
                         break
-                a.append(times)
 
             if self.ttt.turn == opp_id:
                 self._play_2nd_player_move(use_dqn)
@@ -257,15 +200,16 @@ class Arena:
 
 
 if __name__ == "__main__":
+
     ttt = TicTacToe(size=6, win_length=4)
     dqn_agent = DQNAgent(size=ttt.size, name="board-6-4-big-with-skipped")
     arena = Arena(ttt, dqn_agent)
 
-    arena.train_dqn(n_games=1000000, autosave=True, warm_start=True)
+    arena.train_dqn(n_games=100, autosave=False, warm_start=True)
     # arena.play_against_human()
     # arena.train_dqn_against_random(n_games=50000)
-    h = arena.learning_history.set_index('Game')
-    h.to_pickle('reports/learning_history-with-skipped-5.pkl')
+    # h = arena.learning_history.set_index('Game')
+    # h.to_pickle('reports/learning_history-with-skipped-5.pkl')
     #
     # h.Errors.rolling(1000).mean().plot()
     # h.Length.rolling(1000).mean().plot()

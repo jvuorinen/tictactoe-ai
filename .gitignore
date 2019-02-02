@@ -2,3 +2,4 @@
 env
 reports
 
+__pycache__
