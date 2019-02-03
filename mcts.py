@@ -4,6 +4,8 @@ from math import sqrt, log
 from collections import Counter
 from datetime import datetime
 
+from tictactoe import TicTacToe
+
 N_PLAYERS = 2
 
 # Note: get_best_child leads to O(n^2) behavior, could be remedied by storing visited children in a heap structure
@@ -52,11 +54,11 @@ class MockGame:
     def get_possible_actions(self):
         return np.random.choice(self.size, self.depth, replace=False)
 
-    def play(self, action):
+    def play_action(self, action):
         self.change_turn()
         self.depth -= 1
 
-    def simulate_game(self):
+    def play_random_game(self):
         return np.random.randint(2)
 
 
@@ -117,7 +119,7 @@ class MonteCarloTreeSearch:
             # print()
 
         for a in actions:
-            self.sim.play(a)
+            self.sim.play_action(a)
         # print("--------------------------------------")
         return current
 
@@ -142,7 +144,7 @@ class MonteCarloTreeSearch:
                              node_id=self.n_nodes)
                 self.depth_counter[leaf.depth + 1] += 1
                 leaf.visited_children.append(c)
-                self.sim.play(move)
+                self.sim.play_action(move)
                 if not leaf.unvisited_children:
                     leaf.is_leaf = False
             else:
@@ -153,7 +155,8 @@ class MonteCarloTreeSearch:
     def simulate(self):
         """Run a simulated playout from C until a result is achieved."""
         score = [0 for _ in range(N_PLAYERS)]
-        w = self.sim.simulate_game()
+        self.sim.play_random_game()
+        w = self.sim.winner
         if w in (0,1):
             score[w] += 1
         return np.array(score)
@@ -188,8 +191,8 @@ class MonteCarloTreeSearch:
             current = current.parent
 
     def search(self, limit_milliseconds=1000):
-        self.sim.save()
         clock = MillisecondClock()
+        # print('saved sim')
         while clock.get_ms() < limit_milliseconds:
             for i in range(100):
                 # logging.debug("Sim {}...".format(i))
@@ -203,16 +206,24 @@ class MonteCarloTreeSearch:
                 self.n_rollouts += 1
                 # logging.debug("...")
                 # print([n.best_child for n in mcts.root.best_child.visited_children])
-        return self.root.best_child.previous_action
+        self.sim.load()
+
+    def get_best_action(self):
+        return max(self.root.visited_children, key=(lambda x: x.n_sims)).previous_action
 
 
 if __name__ == '__main__':
     np.random.seed(42)
     # logging.basicConfig(level=logging.DEBUG)
-    game = MockGame()
-    mcts = MonteCarloTreeSearch(game)
+    # game = MockGame()
+    # mcts = MonteCarloTreeSearch(game)
 
-    # mcts.search(2000)
-    r = mcts.root
+    # mcts.search(1000)
+    # print(mcts)
 
+
+    ttt = TicTacToe(size=5, win_length=4)
+    mcts = MonteCarloTreeSearch(ttt)
+    mcts.search(1000)
+    mcts.get_best_action()
     # print([n.previous_turn for n in r.visited_children[0].visited_children[1].visited_children])

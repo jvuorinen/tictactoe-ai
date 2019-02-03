@@ -1,7 +1,6 @@
 import numpy as np
 from random import sample
 from itertools import groupby
-from copy import deepcopy
 
 def longest_consecutive_run(a):
     longest = 0
@@ -34,30 +33,23 @@ class TicTacToe:
         self.win_length = win_length
         self.board_p1 = np.zeros((self.size, self.size)).astype(np.bool)
         self.board_p2 = np.zeros((self.size, self.size)).astype(np.bool)
-        self.turn = sample((0,1), 1)[0]
+        self.turn = sample((1,2), 1)[0]
         self.i = 1
         self.winner = None
         self.finished = False
 
-    def save(self):
-        self.save_state = (self.board_p1.copy(), self.board_p2.copy(), self.turn, self.i, self.finished)
-
-    def load(self):
-        (self.board_p1, self.board_p2, self.turn, self.i, self.finished) = deepcopy(self.save_state)
-
     def _change_turn(self):
-        self.turn = 0 if self.turn == 1 else 1
+        self.turn = 2 if self.turn == 1 else 1
         # print("turn: {}".format(self.turn))
 
     def get_previous_turn(self):
-        return 0 if self.turn == 1 else 1
         # print("turn: {}".format(self.turn))
 
     def _get_active_player_board(self):
-        b = self.board_p1 if (self.turn == 0) else self.board_p2
+        b = self.board_p1 if (self.turn == 1) else self.board_p2
         return b
 
-    def get_possible_actions(self):
+    def _get_possible_moves(self):
         free = (~self.board_p1) & (~self.board_p2)
         return [move for move in zip(*np.where(free))]
 
@@ -74,18 +66,18 @@ class TicTacToe:
         if check_if_move_leads_to_win(b, move, self.win_length):
             self.winner = self.turn
             self.finished = True
-            self.turn = None
+            self.turn = 0
             return
         # Mark possible stalemate
         if self.i == self.n_cells:
             self.finished = True
-            self.turn = None
-            self.winner = None
+            self.turn = 0
+            self.winner = 0
             return
         self.i += 1
         self._change_turn()
 
-    def play_action(self, move):
+    def play_move(self, move):
         if self._check_move_validity(move):
             self._mark_move(move)
             return True
@@ -97,10 +89,10 @@ class TicTacToe:
         if self.finished:
             # print("Game is already finished!")
             return
-        moves = self.get_possible_actions()
+        moves = self._get_possible_moves()
         # print("Possible moves: ", moves)
         move = sample(moves, 1)[0]
-        self.play_action(move)
+        self.play_move(move)
 
 
     def play_random_game(self):
@@ -113,17 +105,21 @@ class TicTacToe:
                 return
 
     def __repr__(self):
-        b0 = np.zeros((self.size, self.size)).astype(str)
-        b0[:, :] = '.'
-        b0[self.board_p1] = 'x'
-        b0[self.board_p2] = 'o'
-        return str('\n'.join((' '.join(i) for i in b0)))
+        b0 = np.zeros((self.size, self.size)).astype(np.int)
+        b1 = self.board_p1.astype(int)
+        b2 = 2 * self.board_p2.astype(int)
+        t0 = str(b0 + b1 + b2) + '\n'
+        t1 = "Finished: {}\n".format(self.finished)
+        t2 = "Current turn: {}\n".format(self.turn)
+        t3 = "Winner: {}\n".format(self.winner)
+        t4 = "Turns passed: {}\n".format(self.i)
+        return t0 + t1 + t2 + t3 + t4
 
     def reset(self):
         self.board_p1[:] = False
         self.board_p2[:] = False
         self.i = 1
-        self.turn = sample((0,1), 1)[0]
+        self.turn = sample((1,2), 1)[0]
         self.winner = None
         self.finished = False
 
@@ -135,11 +131,7 @@ class TicTacToe:
             # print(self)
             w = self.winner
             # print(w)
-            if self.winner == None:
-                # print(w)
-                wins[2] += 1
-            else:
-                wins[w] += 1
+            wins[w] += 1
         print(wins)
 
 

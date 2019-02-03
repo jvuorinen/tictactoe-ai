@@ -101,7 +101,7 @@ class Arena:
     def _step(self, action_idx, my_player_id=1):
         # Gets best move and plays it
         move = self.possible_actions[action_idx]
-        r = self.ttt.play_move(move)
+        r = self.ttt.play_action(move)
         if not r:
             reward = self.reward_illegal
             # self.ttt.play_random_move() # Plays a random move if dqn wants to play an illegal move
@@ -120,7 +120,7 @@ class Arena:
             state[0], state[1] = state[1], state[0]
             action = self.dqn_agent.get_action(state)
             move = self.possible_actions[action]
-            r = self.ttt.play_move(move)
+            r = self.ttt.play_action(move)
             if not r:
                 # print("Illegal move, playing randomly...")
                 self.ttt.play_random_move()
@@ -193,7 +193,7 @@ class Arena:
                 print(self.ttt)
                 ip = int(input())
                 move = self.possible_actions[ip - 1]
-                self.ttt.play_move(move)
+                self.ttt.play_action(move)
             else:
                 self._play_2nd_player_move()
         print(self.ttt)
