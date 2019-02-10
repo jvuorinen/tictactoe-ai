@@ -8,8 +8,6 @@ from tictactoe import TicTacToe
 
 N_PLAYERS = 2
 
-# Note: get_best_child leads to O(n^2) behavior, could be remedied by storing visited children in a heap structure
-
 def ucb(w, n, t, c=1.414):
     if t == 0:
         return 0
@@ -66,6 +64,7 @@ class MCTSnode:
     def __init__(self, parent, previous_action, previous_turn, depth, node_id, is_root=False):
         self.n_won = np.array([0 for _ in range(N_PLAYERS)])
         self.n_sims = 0
+        self.win_rate = 0
         self.parent = parent
         self.previous_turn = previous_turn
         self.depth = depth
